@@ -37,10 +37,23 @@ class LyzrRuntime:
     ) -> BaseModel:
         agent = self._agents.get(spec.name)
         if agent is None:
-            logger.info("Creating Lyzr agent %r on %s", spec.name, self._provider)
-            agent = self._studio.create_agent(
-                name=spec.name,
-                provider=self._provider,
+            agent = self._get_or_create(spec)
+            self._agents[spec.name] = agent
+        result = agent.run(message)
+        return _coerce(result, spec.response_model)
+
+    def _get_or_create(self, spec: AgentSpec):
+        """Reuse the platform agent of this name (syncing its config), else create it.
+
+        Without this, each process re-created a fresh server-side agent, piling up
+        duplicates in the Lyzr account. Looking up by name makes runs idempotent; the
+        update keeps the reused agent in sync with the current spec.
+        """
+        existing_id = self._find_agent_id(spec.name)
+        if existing_id is not None:
+            logger.info("Reusing Lyzr agent %r (id=%s)", spec.name, existing_id)
+            return self._studio.update_agent(
+                existing_id,
                 role=spec.role,
                 goal=spec.goal,
                 instructions=spec.instructions,
@@ -48,10 +61,28 @@ class LyzrRuntime:
                 response_model=spec.response_model,
                 llm_credential_id=self._credential_id,
             )
-            self._agents[spec.name] = agent
+        logger.info("Creating Lyzr agent %r on %s", spec.name, self._provider)
+        return self._studio.create_agent(
+            name=spec.name,
+            provider=self._provider,
+            role=spec.role,
+            goal=spec.goal,
+            instructions=spec.instructions,
+            temperature=spec.temperature,
+            response_model=spec.response_model,
+            llm_credential_id=self._credential_id,
+        )
 
-        result = agent.run(message)
-        return _coerce(result, spec.response_model)
+    def _find_agent_id(self, name: str) -> str | None:
+        try:
+            listing = self._studio.list_agents()
+        except Exception as exc:  # a listing failure shouldn't block a fresh create
+            logger.warning("Could not list existing agents (%s); creating a new one.", exc)
+            return None
+        for agent in getattr(listing, "agents", listing):
+            if _attr(agent, "name") == name:
+                return _attr(agent, "id")
+        return None
 
 
 def _coerce(result: Any, model: type[BaseModel]) -> BaseModel:
@@ -75,3 +106,8 @@ def _coerce(result: Any, model: type[BaseModel]) -> BaseModel:
     raise TypeError(
         f"Could not coerce agent output of type {type(result).__name__} into {model.__name__}"
     )
+
+
+def _attr(obj: Any, key: str):
+    """Read a field whether the listing yields pydantic objects or plain dicts."""
+    return obj.get(key) if isinstance(obj, dict) else getattr(obj, key, None)
