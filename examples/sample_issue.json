@@ -1,0 +1,7 @@
+{
+  "repo_full_name": "acme/widgets",
+  "issue_number": 142,
+  "title": "Checkout crashes with NoneType error when cart is empty",
+  "body": "## Description\nWhen a user proceeds to checkout with an empty cart, the app crashes with a 500.\n\n## Steps to reproduce\n1. Start a fresh session, add no items to the cart\n2. Click 'Checkout'\n3. The request fails\n\n## Error\n```\nTraceback (most recent call last):\n  File \"src/checkout/service.py\", line 88, in compute_total\n    return sum(item.price for item in cart.items)\nAttributeError: 'NoneType' object has no attribute 'items'\n```\n\nThe crash is in `compute_total` in `src/checkout/service.py`. The `cart` object is `None` when the session has expired, and `compute_total` never guards against that.",
+  "labels": ["bug", "checkout", "high-priority"]
+}
