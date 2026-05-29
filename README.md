@@ -111,7 +111,10 @@ src/nexus/
 
 ## Status
 
-- [x] Three-node pipeline runs end-to-end on the mock runtime (`pytest`: 9 passing)
+- [x] Three-node pipeline runs end-to-end on the mock runtime (`pytest`: 17 passing)
 - [x] Validator feedback loop (reject → revise → approve)
 - [x] PR drafting; opening wired via PyGithub (needs `GITHUB_TOKEN`)
-- [ ] Real Lyzr/Gemini agent runs (flip `NEXUS_RUNTIME=lyzr` with credentials)
+- [x] `LyzrRuntime` wired to the real `lyzr-adk` 0.1.10 sync API (`studio.agents.create/
+      list/update`, `agent.run`), with an offline contract test that pins the SDK surface
+- [ ] Live Gemini round-trip executed (set `LYZR_API_KEY` + `LYZR_LLM_CREDENTIAL_ID`
+      locally and flip `NEXUS_RUNTIME=lyzr` — the one step that needs real credentials)

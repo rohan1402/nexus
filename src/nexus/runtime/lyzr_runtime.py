@@ -15,15 +15,26 @@ logger = logging.getLogger("nexus.runtime.lyzr")
 class LyzrRuntime:
     """Creates each agent once on the Lyzr platform, then runs it.
 
-    `studio.create_agent(..., response_model=Model)` registers a server-side agent
+    `studio.agents.create(..., response_model=Model)` registers a server-side agent
     whose `run()` returns a validated `Model` instance. We cache the created agent
     per spec name so repeated invocations (e.g. the Validator retry loop) reuse it.
     """
 
-    def __init__(self, *, api_key: str, provider: str, credential_id: str) -> None:
-        from lyzr import Studio  # imported lazily so mock-only runs need no cloud setup
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        provider: str,
+        credential_id: str,
+        studio: Any | None = None,
+    ) -> None:
+        # `studio` is injectable so the runtime can be unit-tested with a fake client
+        # and no network; by default we build the real Lyzr Studio.
+        if studio is None:
+            from lyzr import Studio  # imported lazily so mock-only runs need no cloud setup
 
-        self._studio = Studio(api_key=api_key)
+            studio = Studio(api_key=api_key)
+        self._studio = studio
         self._provider = provider
         self._credential_id = credential_id
         self._agents: dict[str, Any] = {}
@@ -52,7 +63,7 @@ class LyzrRuntime:
         existing_id = self._find_agent_id(spec.name)
         if existing_id is not None:
             logger.info("Reusing Lyzr agent %r (id=%s)", spec.name, existing_id)
-            return self._studio.update_agent(
+            return self._studio.agents.update(
                 existing_id,
                 role=spec.role,
                 goal=spec.goal,
@@ -62,7 +73,7 @@ class LyzrRuntime:
                 llm_credential_id=self._credential_id,
             )
         logger.info("Creating Lyzr agent %r on %s", spec.name, self._provider)
-        return self._studio.create_agent(
+        return self._studio.agents.create(
             name=spec.name,
             provider=self._provider,
             role=spec.role,
@@ -75,7 +86,7 @@ class LyzrRuntime:
 
     def _find_agent_id(self, name: str) -> str | None:
         try:
-            listing = self._studio.list_agents()
+            listing = self._studio.agents.list()
         except Exception as exc:  # a listing failure shouldn't block a fresh create
             logger.warning("Could not list existing agents (%s); creating a new one.", exc)
             return None
